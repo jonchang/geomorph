@@ -85,7 +85,7 @@
 #'~log(CS) + st*sp, 
 #'groups = ~sp, slope = ~log(CS), angle.type = "deg", iter=19)
 
-advanced.procD.lm<-function(f1, f2, groups = NULL, slope = NULL, angle.type = c("r", "deg", "rad"), iter=999, verbose = FALSE){
+advanced.procD.lm<-function(f1, f2, groups = NULL, slope = NULL, angle.type = c("r", "deg", "rad"), iter=999, verbose = FALSE, .parallel.cores = getOption("mc.cores", 1L), .parallel.cluster = NULL){
   data=NULL
   f1 <- as.formula(f1)
   Y <- eval(f1[[2]], parent.frame())
@@ -95,6 +95,11 @@ advanced.procD.lm<-function(f1, f2, groups = NULL, slope = NULL, angle.type = c(
   k1 <- length(attr(terms(f1), "term.labels"))
   k2 <- length(attr(terms(f2), "term.labels"))
   if (any(is.na(Y)) == T) stop("Response data matrix (shape) contains missing values. Estimate these first (see 'estimate.missing').")
+  if (.parallel.cores > 1) {
+      if (is.null(.parallel.cluster)) cl <- parallel::makePSOCKcluster(min(.parallel.cores, iter))
+    applyfn <- lapply
+        applyfn <- function(X, FUN, ...) parallel::parLapply(cl, X, FUN, ...)
+  }
   if(k1 > k2) ff <- f1 else ff <- f2
   if(k1 > k2) fr <- f2 else fr <- f1
   if(k1 == k2) stop("Models have same df")
@@ -120,11 +125,16 @@ advanced.procD.lm<-function(f1, f2, groups = NULL, slope = NULL, angle.type = c(
   }
   
   if(pairwise.cond == "none"){
-    for(i in 1:iter){
+    if (.parallel.cores > 1) {
+        parallel::clusterExport(cl, list("R", "Y", "red.terms", "full.terms"), envir = environment())
+        parallel::clusterExport(cl, lapply(attr(full.terms, "variables"), toString), envir = attr(full.terms, ".Environment"))
+    }
+    tmp_P <- applyfn(1:iter, function(i) {
       Rr <- R[sample(nrow(R)),]
       pseudoY = predict(lm(Y ~ model.matrix(red.terms) - 1)) + Rr
-      P[i+1] <- SSE(lm(pseudoY ~ model.matrix(red.terms) - 1)) - SSE(lm(pseudoY ~ model.matrix(full.terms) - 1)) 
-    }
+      SSE(lm(pseudoY ~ model.matrix(red.terms) - 1)) - SSE(lm(pseudoY ~ model.matrix(full.terms) - 1)) 
+    })
+    P <- c(SSm, unlist(tmp_P))
     P.val <- pval(P)
     Z.score <- effect.size(P)
     anova.tab <- data.frame(df = c(dfr,dff), SSE = c(SSEr, SSEf), SS = c(NA, SSm),
