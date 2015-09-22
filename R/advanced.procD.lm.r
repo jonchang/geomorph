@@ -95,9 +95,9 @@ advanced.procD.lm<-function(f1, f2, groups = NULL, slope = NULL, angle.type = c(
   k1 <- length(attr(terms(f1), "term.labels"))
   k2 <- length(attr(terms(f2), "term.labels"))
   if (any(is.na(Y)) == T) stop("Response data matrix (shape) contains missing values. Estimate these first (see 'estimate.missing').")
+  applyfn <- lapply
   if (.parallel.cores > 1) {
-      if (is.null(.parallel.cluster)) cl <- parallel::makePSOCKcluster(min(.parallel.cores, iter))
-    applyfn <- lapply
+      if (is.null(.parallel.cluster)) cl <- parallel::makePSOCKcluster(min(.parallel.cores, iter)) else cl <- .parallel.cluster
         applyfn <- function(X, FUN, ...) parallel::parLapply(cl, X, FUN, ...)
   }
   if(k1 > k2) ff <- f1 else ff <- f2
