@@ -151,13 +151,18 @@ advanced.procD.lm<-function(f1, f2, groups = NULL, slope = NULL, angle.type = c(
     m <- ls.means(gr, cov.mf = NULL, Y)
     P.dist <- array(, c(nrow(m), nrow(m),iter+1))
     P.dist[,,1] <- as.matrix(dist(m))
-    for(i in 1:iter){
+    if (.parallel.cores > 1) {
+        parallel::clusterExport(cl, list("R", "Y", "gr", "red.terms", "full.terms"), envir = environment())
+        parallel::clusterExport(cl, lapply(attr(full.terms, "variables"), toString), envir = attr(full.terms, ".Environment"))
+    }
+    tmp_P <- applyfn(1:iter, function(i) {
       Rr <- R[sample(nrow(R)),]
       pseudoY = predict(lm(Y ~ model.matrix(red.terms) - 1)) + Rr
-      P[i+1] <- SSE(lm(pseudoY ~ model.matrix(red.terms) - 1)) - SSE(lm(pseudoY ~ model.matrix(full.terms) - 1)) 
-      mr <- ls.means(gr, cov.mf = NULL, pseudoY)
-      P.dist[,,i+1] <- as.matrix(dist(mr))  
-    }
+      SSE(lm(pseudoY ~ model.matrix(red.terms) - 1)) - SSE(lm(pseudoY ~ model.matrix(full.terms) - 1)) 
+      #mr <- ls.means(gr, cov.mf = NULL, pseudoY)
+      #P.dist[,,i+1] <- as.matrix(dist(mr))
+    })
+    P <- c(SSm, unlist(tmp_P))
     P.val <- pval(P)
     Z.score <- effect.size(P)
 
