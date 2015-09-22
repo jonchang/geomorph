@@ -70,36 +70,45 @@
 procD.lm <- function(f1, iter = 999, RRPP = FALSE, int.first = FALSE, verbose=FALSE){
   form.in <- formula(f1)
   Y <- eval(form.in[[2]], parent.frame())
-  if(length(dim(Y)) == 3)  Y <- two.d.array(Y) else Y <- as.matrix(Y)
-  if(nrow(Y) != nrow(model.frame(form.in[-2]))) stop("Different numbers of specimens in dependent and independent variables")
-  form.new <- as.formula(paste(c("Y",form.in[[3]]),collapse="~"))
-  if(int.first == TRUE) ko = TRUE else ko = FALSE
+  if (length(dim(Y)) == 3)
+    Y <- geomorph::two.d.array(Y)
+  else Y <- as.matrix(Y)
+  if (nrow(Y) != nrow(model.frame(form.in[-2])))
+    stop("Different numbers of specimens in dependent and independent variables")
+  form.new <- as.formula(paste(c("Y", form.in[[3]]), collapse = "~"))
+  if (int.first == TRUE)
+    ko = TRUE
+  else ko = FALSE
   Terms <- terms(form.new, keep.order = ko)
   mod.mf <- model.frame(Terms)
-  if (any(is.na(Y)) == T) stop("Response data matrix (shape) contains missing values. Estimate these first (see 'estimate.missing').")
-
-  anova.parts.obs <- anova.parts(f1 = form.new, Yalt = "observed", keep.order=ko)
-  anova.tab <-anova.parts.obs$table  
-  Xs <- mod.mats(form.new, mod.mf, keep.order=ko)
+  if (any(is.na(Y)) == T)
+    stop("Response data matrix (shape) contains missing values. Estimate these first (see 'estimate.missing').")
+  anova.parts.obs <- geomorph:::anova.parts(f1 = form.new, Yalt = "observed",
+                                 keep.order = ko)
+  anova.tab <- anova.parts.obs$table
+  Xs <- geomorph:::mod.mats(form.new, mod.mf, keep.order = ko)
   k <- length(Xs$Xs) - 1
-  P <-array(0, c(k, 1, iter+1))
-  SS.obs <-anova.parts.obs$SS[1:k]
-  P[,,1] <- SS.obs
-  for(i in 1:iter){
-    if(RRPP == TRUE) {
-      SS.r <- SS.random(Y, Xs, SS.obs, Yalt = "RRPP")
-    } else SS.r <- SS.random(Y, Xs, SS.obs, Yalt = "resample")
-    P[,,i+1] <- SS.r$SS
-  }	
-  P.val <- Pval.matrix(P)
-  Z <- Effect.size.matrix(P)
-  anova.tab <- data.frame(anova.tab, Z = c(Z, NA, NA), P.value = c(P.val, NA, NA))
-  if(RRPP == TRUE) {
+  P <- array(0, c(k, 1, iter + 1))
+  SS.obs <- anova.parts.obs$SS[1:k]
+  P[, , 1] <- SS.obs
+  method <- ifelse(RRPP, "RRPP", "resample")
+  cl <- parallel::makeCluster(parallel::detectCores(), "PSOCK")
+  result <- simplify2array(parallel::parLapply(cl, 1:iter, function(x) geomorph:::SS.random(Y, Xs, SS.obs, Yalt=method)$SS))
+  parallel::stopCluster(cl)
+  P[, , 1:iter+1] <- result
+  P.val <- geomorph:::Pval.matrix(P)
+  Z <- geomorph:::Effect.size.matrix(P)
+  anova.tab <- data.frame(anova.tab, Z = c(Z, NA, NA), P.value = c(P.val,
+                                                                   NA, NA))
+  if (RRPP == TRUE) {
     anova.title = "\nRandomized Residual Permutation Procedure used\n"
-  } else anova.title = "\nRandomization of Raw Values used\n"
-  attr(anova.tab, "heading") <- paste("\nType I (Sequential) Sums of Squares and Cross-products\n",anova.title)
+  }
+  else anova.title = "\nRandomization of Raw Values used\n"
+  attr(anova.tab, "heading") <- paste("\nType I (Sequential) Sums of Squares and Cross-products\n",
+                                      anova.title)
   class(anova.tab) <- c("anova", class(anova.tab))
-  if(verbose==TRUE)  {
-    list(anova.table = anova.tab, call=match.call(), SS.rand = P)
-  } else anova.tab
+  if (verbose == TRUE) {
+    list(anova.table = anova.tab, call = match.call(), SS.rand = P)
+  }
+  else anova.tab
 }
